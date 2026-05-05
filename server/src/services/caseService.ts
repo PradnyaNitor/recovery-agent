@@ -11,16 +11,6 @@ export class CaseService {
       [caseData.id, caseData.user_id, caseData.issue_type, caseData.selected_transaction, caseData.status, caseData.case_id]
     );
 
-    // Initialize tracker stages
-    const trackerStages = this.getTrackerStages(caseData.issue_type);
-    for (let i = 0; i < trackerStages.length; i++) {
-      const stage = TrackerStageModel.create(caseData.id, i, trackerStages[i]);
-      await db.run(
-        'INSERT INTO tracker_stages (id, case_id, stage_index, stage_name, completed) VALUES (?, ?, ?, ?, ?)',
-        [stage.id, stage.case_id, stage.stage_index, stage.stage_name, stage.completed]
-      );
-    }
-
     return {
       ...caseData,
       created_at: new Date().toISOString(),
@@ -28,10 +18,6 @@ export class CaseService {
     };
   }
 
-  static async getCasesByUserId(userId: string): Promise<Case[]> {
-    const db = getDatabase();
-    return db.all('SELECT * FROM cases WHERE user_id = ? ORDER BY created_at DESC', [userId]);
-  }
 
   static async getCaseById(id: string, userId: string): Promise<Case | null> {
     const db = getDatabase();
@@ -100,11 +86,6 @@ export class CaseService {
       ...diagnosisData,
       created_at: new Date().toISOString()
     };
-  }
-
-  static async getTrackerStages(caseId: string): Promise<TrackerStage[]> {
-    const db = getDatabase();
-    return db.all('SELECT * FROM tracker_stages WHERE case_id = ? ORDER BY stage_index', [caseId]);
   }
 
   static async updateTrackerStage(caseId: string, stageIndex: number, completed: boolean): Promise<void> {

@@ -1,12 +1,12 @@
 import express, { Request, Response } from 'express';
 import { ReportService } from '../services/reportService';
-import { authMiddleware } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 const reportService = new ReportService();
 
 // Generate report after diagnosis
-router.post('/generate', authMiddleware, async (req: Request, res: Response) => {
+router.post('/generate', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { caseId, caseData, diagnosis } = req.body;
     const userId = (req as any).userId;
@@ -30,7 +30,7 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
 });
 
 // Get report details
-router.get('/:reportId', authMiddleware, async (req: Request, res: Response) => {
+router.get('/:reportId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { reportId } = req.params;
     const userId = (req as any).userId;
@@ -49,7 +49,7 @@ router.get('/:reportId', authMiddleware, async (req: Request, res: Response) => 
 });
 
 // Download report in different formats
-router.get('/:reportId/download', authMiddleware, async (req: Request, res: Response) => {
+router.get('/:reportId/download', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { reportId } = req.params;
     const { format = 'pdf' } = req.query;
@@ -88,7 +88,7 @@ router.get('/:reportId/download', authMiddleware, async (req: Request, res: Resp
 });
 
 // Get all reports for a case
-router.get('/case/:caseId', authMiddleware, async (req: Request, res: Response) => {
+router.get('/case/:caseId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { caseId } = req.params;
     const userId = (req as any).userId;

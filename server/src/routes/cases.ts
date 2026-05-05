@@ -20,7 +20,10 @@ const updateTransactionSchema = z.object({
 // Get all cases for the authenticated user
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
-    const cases = await CaseService.getCasesByUserId(req.user!.userId);
+    const cases = await CaseService.getCaseById(
+  req.params.id,
+  req.user!.userId
+);
     res.json(cases);
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch cases' });
@@ -107,8 +110,7 @@ router.get('/:id/diagnosis', async (req: AuthenticatedRequest, res) => {
 // Get tracker stages for a case
 router.get('/:id/tracker', async (req: AuthenticatedRequest, res) => {
   try {
-    const stages = await CaseService.getTrackerStages(req.params.id);
-    res.json(stages);
+     res.json({ message: "Stages endpoint not implemented yet" });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch tracker stages' });
   }

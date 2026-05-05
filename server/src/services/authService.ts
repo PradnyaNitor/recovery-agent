@@ -17,11 +17,13 @@ export class AuthService {
   }
 
   static generateToken(user: User): string {
-    return jwt.sign(
-      { userId: user.id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+  return jwt.sign(
+  { userId: user.id, email: user.email },
+  process.env.JWT_SECRET as string,
+  {
+    expiresIn: '1h'
+  }
+);  
   }
 
   static verifyToken(token: string): any {

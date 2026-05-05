@@ -22,7 +22,7 @@ export function getDatabase(): Database {
     close: promisify(db.close.bind(db))
   };
 
-  return dbAsync;
+  return dbAsync as any;
 }
 
 export async function initializeDatabase(): Promise<void> {
