@@ -44,6 +44,10 @@ app.use('/api/diagnosis', diagnosisRoutes);
 app.use('/api/evidence', evidenceRoutes);
 app.use('/api/reports', reportRoutes);
 
+app.get("/", (req, res) => {
+  res.send("API is running");
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
