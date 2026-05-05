@@ -1,0 +1,15 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": "dist",
+  "env": {
+    "VITE_API_URL": "https://recovery-agent-backend.railway.app",
+    "VITE_ENV": "production"
+  },
+  "redirects": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://recovery-agent-backend.railway.app/api/:path*"
+    }
+  ]
+}
