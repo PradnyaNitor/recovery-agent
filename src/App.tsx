@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Circle, FilePlus, RefreshCcw, ShieldAlert, ShieldCheck, Sparkles, UploadCloud, BarChart3, FileSpreadsheet, Home } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle, FilePlus, RefreshCcw, ShieldAlert, ShieldCheck, Sparkles, UploadCloud, BarChart3, FileSpreadsheet, Home, Users, User, LogOut } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
@@ -41,10 +41,15 @@ interface Case {
 }
 
 type ViewMode = 'flow' | 'dashboard';
+type Persona = 'customer' | 'support';
 
 const stepIndices = issueSteps.map((title, index) => ({ title, index }));
 
 function App() {
+  const [persona, setPersona] = useState<Persona | null>(() => {
+    const saved = localStorage.getItem('active-persona');
+    return (saved as Persona) || null;
+  });
   const [viewMode, setViewMode] = useState<ViewMode>('flow');
   const [cases, setCases] = useState<Case[]>(() => {
     const saved = localStorage.getItem('recovery-cases');
@@ -106,6 +111,31 @@ function App() {
   }, [trackerStage]);
 
   const progressPercent = Math.round(((currentStep + 1) / issueSteps.length) * 100);
+
+  // Save persona to localStorage
+  useEffect(() => {
+    if (persona) {
+      localStorage.setItem('active-persona', persona);
+    }
+  }, [persona]);
+
+  const switchPersona = (newPersona: Persona) => {
+    setPersona(newPersona);
+    // Reset flow but keep dashboard data
+    setCurrentStep(0);
+    setSelectedIssue(null);
+    setChatResponse('Select an issue type to begin your recovery case.');
+    setSelectedTransactionIndex(null);
+    setUploads([]);
+    setSkippedEvidence(false);
+    setDiagnosis(null);
+    setIsDiagnosing(false);
+    setTrackerStage(0);
+    setRefineText('');
+    setReportId(null);
+    setIsGeneratingReport(false);
+    setReportDownloaded(false);
+  };
 
   useEffect(() => {
     if (currentStep === 4 && selectedIssue && !diagnosis) {
@@ -698,15 +728,117 @@ function App() {
     }
   };
 
-  return (
+  return !persona ? (
+    // Persona selection screen
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-white mb-3">Recovery Agent</h1>
+          <p className="text-slate-400 text-lg">Choose your role to continue</p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Customer Persona */}
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.05 }}
+            onClick={() => setPersona('customer')}
+            className="group relative rounded-3xl border-2 border-slate-800 bg-slate-950/95 p-8 text-left transition hover:border-sky-400 hover:bg-slate-900"
+          >
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-sky-500/10 to-transparent opacity-0 transition group-hover:opacity-100" />
+            <div className="relative">
+              <div className="mb-4 inline-flex rounded-2xl bg-sky-500/10 p-3">
+                <User className="h-6 w-6 text-sky-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Customer</h2>
+              <p className="text-slate-400 text-sm mb-6">
+                File recovery claims and track your cases. Submit evidence and monitor resolution progress.
+              </p>
+              <div className="flex items-center gap-2 text-sky-400 text-sm font-semibold">
+                Get Started <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+          </motion.button>
+
+          {/* Support Persona */}
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            whileHover={{ scale: 1.05 }}
+            onClick={() => setPersona('support')}
+            className="group relative rounded-3xl border-2 border-slate-800 bg-slate-950/95 p-8 text-left transition hover:border-emerald-400 hover:bg-slate-900"
+          >
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 transition group-hover:opacity-100" />
+            <div className="relative">
+              <div className="mb-4 inline-flex rounded-2xl bg-emerald-500/10 p-3">
+                <Users className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Customer Care</h2>
+              <p className="text-slate-400 text-sm mb-6">
+                Manage customer cases and provide support. Escalate issues and update case status.
+              </p>
+              <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold">
+                Access Portal <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+          </motion.button>
+        </div>
+      </div>
+    </div>
+  ) : (
+    // Main application interface
     <div className="min-h-screen bg-slate-950 pb-12">
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
         {/* Navigation Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-white">Recovery Agent</h1>
-            <p className="mt-2 text-slate-400">Case Management & Recovery Workflow</p>
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-4xl font-bold text-white">Recovery Agent</h1>
+              <p className="mt-2 text-slate-400">
+                {persona === 'customer' ? 'Customer Portal - Track Your Recovery Cases' : 'Support Portal - Manage Customer Cases'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPersona(null)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700"
+            >
+              <LogOut className="h-4 w-4" />
+              Switch Role
+            </button>
           </div>
+
+          {/* Persona Tabs */}
+          <div className="flex gap-3 mb-6">
+            <button
+              type="button"
+              onClick={() => switchPersona('customer')}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                persona === 'customer'
+                  ? 'bg-sky-500 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <User className="h-4 w-4" />
+              Customer
+            </button>
+            <button
+              type="button"
+              onClick={() => switchPersona('support')}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                persona === 'support'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              Customer Care
+            </button>
+          </div>
+
+          {/* View Mode Tabs */}
           <div className="flex gap-3">
             <button
               type="button"
@@ -718,7 +850,7 @@ function App() {
               }`}
             >
               <Home className="h-4 w-4" />
-              Recovery Flow
+              {persona === 'customer' ? 'File Claim' : 'Manage Cases'}
             </button>
             <button
               type="button"
@@ -730,7 +862,7 @@ function App() {
               }`}
             >
               <BarChart3 className="h-4 w-4" />
-              Dashboard
+              {persona === 'customer' ? 'My Cases' : 'Analytics'}
             </button>
           </div>
         </div>
@@ -739,52 +871,103 @@ function App() {
           /* Dashboard View */
           <div className="space-y-8">
             {/* Statistics Cards */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-blue-500/10 p-3">
-                    <FilePlus className="h-6 w-6 text-blue-400" />
+            {persona === 'customer' ? (
+              // Customer Dashboard
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-blue-500/10 p-3">
+                      <FilePlus className="h-6 w-6 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.total}</p>
+                      <p className="text-sm text-slate-400">My Cases</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-white">{dashboardStats.total}</p>
-                    <p className="text-sm text-slate-400">Total Cases</p>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-amber-500/10 p-3">
+                      <RefreshCcw className="h-6 w-6 text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.open}</p>
+                      <p className="text-sm text-slate-400">In Progress</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-rose-500/10 p-3">
+                      <ShieldAlert className="h-6 w-6 text-rose-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.escalated}</p>
+                      <p className="text-sm text-slate-400">Attention Needed</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-emerald-500/10 p-3">
+                      <ShieldCheck className="h-6 w-6 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.resolved}</p>
+                      <p className="text-sm text-slate-400">Completed</p>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-amber-500/10 p-3">
-                    <RefreshCcw className="h-6 w-6 text-amber-400" />
+            ) : (
+              // Support Dashboard
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-purple-500/10 p-3">
+                      <FilePlus className="h-6 w-6 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.total}</p>
+                      <p className="text-sm text-slate-400">Total Cases</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-white">{dashboardStats.open}</p>
-                    <p className="text-sm text-slate-400">Open Cases</p>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-yellow-500/10 p-3">
+                      <RefreshCcw className="h-6 w-6 text-yellow-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.open}</p>
+                      <p className="text-sm text-slate-400">Active Cases</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-orange-500/10 p-3">
+                      <ShieldAlert className="h-6 w-6 text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.escalated}</p>
+                      <p className="text-sm text-slate-400">Escalated</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-teal-500/10 p-3">
+                      <ShieldCheck className="h-6 w-6 text-teal-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{dashboardStats.resolved}</p>
+                      <p className="text-sm text-slate-400">Closed</p>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-rose-500/10 p-3">
-                    <ShieldAlert className="h-6 w-6 text-rose-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-white">{dashboardStats.escalated}</p>
-                    <p className="text-sm text-slate-400">Escalated Cases</p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-emerald-500/10 p-3">
-                    <ShieldCheck className="h-6 w-6 text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-white">{dashboardStats.resolved}</p>
-                    <p className="text-sm text-slate-400">Resolved Cases</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Additional Metrics */}
             <div className="grid gap-6 md:grid-cols-2">

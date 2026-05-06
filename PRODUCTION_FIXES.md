@@ -1,7 +1,17 @@
 # Production Code Fixes for Recovery Agent Application
 
 ## Overview
-This document contains comprehensive fixes and enhancements for the Recovery Agent application, including dispute packet crash fixes, navigation improvements, and a complete dashboard implementation with Excel export functionality.
+This document contains comprehensive fixes and enhancements for the Recovery Agent application, including dispute packet crash fixes, navigation improvements, dashboard implementation with Excel export, and persona-based workflows for Customer and Customer Care roles.
+
+## Complete Feature List
+
+### ✅ Fixes Applied:
+1. Fixed dispute packet crash with defensive email masking
+2. Added "Start New Case" button for seamless case navigation
+3. Complete dashboard with case statistics and metrics
+4. Excel export functionality for case data
+5. **NEW:** Persona-based workflows (Customer vs Customer Care)
+6. **NEW:** Role switching without login credentials
 
 ## Files Modified
 
@@ -95,7 +105,68 @@ const resetToLanding = () => {
 - Button uses sky blue styling to distinguish from other action buttons
 - Clicking the button returns user to the landing page (Step 0)
 
-### 4. Dashboard Implementation
+### 4. Persona-Based Workflows (NEW)
+
+**Location:** `src/App.tsx` (Complete rewrite of component structure)
+
+**New Type Definition:**
+```typescript
+type Persona = 'customer' | 'support';
+```
+
+**Persona Selection Screen:**
+- Beautiful modal-style selection screen with two options
+- Customer persona: "File recovery claims and track your cases"
+- Support persona: "Manage customer cases and provide support"
+- No login required - instant role switching
+- Persists selection in localStorage
+
+**Key State Variables:**
+```typescript
+const [persona, setPersona] = useState<Persona | null>(() => {
+  const saved = localStorage.getItem('active-persona');
+  return (saved as Persona) || null;
+});
+```
+
+**Conditional Rendering:**
+- If `persona` is null: Show persona selection screen
+- If `persona` is 'customer': Show customer-specific interface
+- If `persona` is 'support': Show support-specific interface
+
+**Customer Workflow Features:**
+- Dashboard shows: "My Cases", "In Progress", "Attention Needed", "Completed"
+- View modes: "File Claim" (workflow) and "My Cases" (dashboard)
+- Case submission through 7-step workflow
+- Personal case tracking and monitoring
+- Download recovery reports
+
+**Support Workflow Features:**
+- Dashboard shows: "Total Cases", "Active Cases", "Escalated", "Closed"
+- View modes: "Manage Cases" (workflow) and "Analytics" (dashboard)
+- Case management from all customers
+- Escalation and status update capabilities
+- Bulk analytics and reporting
+
+**Persona Switching:**
+- "Switch Role" button in header (top right)
+- Returns to persona selection screen
+- Resets current workflow but preserves all case data
+- Seamless switching between roles within same session
+
+**Navigation Header Updates:**
+- Dynamic subtitle based on persona
+- Persona indicator tabs (Customer / Customer Care)
+- "Switch Role" button for persona selection
+- Role-specific view mode labels
+
+**Dashboard Customization:**
+- Customer: Friendly terminology ("My Cases", "Completed")
+- Support: Professional terminology ("Total Cases", "Closed")
+- Different color schemes for visual distinction
+- Persona-aware statistics labels
+
+### 5. Dashboard Implementation
 
 **Location:** `src/App.tsx` (Lines 1-950+)
 
@@ -303,33 +374,46 @@ const exportToExcel = () => {
    npm install xlsx
    ```
 
-2. **Update helpers.ts:**
-   - Locate the `maskEmail` function in `src/utils/helpers.ts`
-   - Replace the function body with the fixed version above
-   - Ensure the import statement for `IssueType` remains intact
+2. **Update Imports in src/App.tsx:**
+   Add these icons to the lucide-react import:
+   ```typescript
+   import { ..., Users, User, LogOut } from 'lucide-react';
+   import * as XLSX from 'xlsx';
+   ```
 
-3. **Update App.tsx:**
-   - Add the new imports at the top: `BarChart3`, `FileSpreadsheet`, `Home` from lucide-react, and `* as XLSX from 'xlsx'`
-   - Add the `Case` interface and `ViewMode` type
-   - Add the new state variables: `viewMode` and `cases`
-   - Add the `dashboardStats` calculation
-   - Add the `useEffect` for localStorage persistence
-   - Update `resetToLanding` to save cases before resetting
-   - Add the `exportToExcel` function
-   - Replace the main return statement with the conditional rendering for dashboard/flow views
+3. **Add New Type:**
+   ```typescript
+   type Persona = 'customer' | 'support';
+   ```
 
-4. **Build and Deploy:**
-   - Run `npm run build` to create production build
-   - Deploy the updated `dist/` folder to your hosting platform (Vercel/Railway)
-   - Restart the backend server if any backend changes were made
+4. **Update App Component:**
+   - Add `persona` state variable with localStorage persistence
+   - Add `switchPersona` function
+   - Wrap entire JSX return in ternary operator for persona selection
+   - Update navigation headers with persona-specific labels
+   - Add persona-specific dashboard metrics
 
-5. **Testing:**
-   - Test the dispute packet display on step 5
-   - Verify no crashes occur when navigating through all 7 steps
-   - Test the "Start New Case" button functionality
-   - Switch to Dashboard tab and verify statistics display
+5. **Update Dashboard Views:**
+   - Customer dashboard: "My Cases", "In Progress", "Attention Needed", "Completed"
+   - Support dashboard: "Total Cases", "Active Cases", "Escalated", "Closed"
+   - Conditional rendering based on `persona` value
+
+6. **Build and Deploy:**
+   ```bash
+   npm run build
+   ```
+   Deploy the updated `dist/` folder to your hosting platform (Vercel/Railway)
+
+7. **Testing:**
+   - Clear browser localStorage or open in incognito mode
+   - Click on "Customer" persona
+   - Verify workflow and dashboard for customer view
+   - Click "Switch Role" button
+   - Click on "Customer Care" persona
+   - Verify different workflow and dashboard labels
+   - Test case creation and tracking
    - Test Excel export functionality
-   - Complete multiple cases and verify dashboard updates
+   - Verify persona persistence across page reloads
 
 ## Notes
 - These changes are backward compatible and don't affect existing functionality
@@ -349,50 +433,103 @@ To verify these changes are working:
    ```
    Server will run on `http://localhost:4173` or next available port
 
-2. **Test Dispute Packet Fix:**
-   - Navigate to http://localhost:4174/
-   - Go through Steps 0-4
+2. **Test Persona Selection:**
+   - Clear browser localStorage or open in incognito mode
+   - Navigate to http://localhost:4175/
+   - ✅ Verify persona selection screen appears with two options
+   - ✅ Verify "Customer" button is visible with description
+   - ✅ Verify "Customer Care" button is visible with description
+
+3. **Test Customer Persona:**
+   - Click on "Customer" button
+   - ✅ Verify header shows "Customer Portal - Track Your Recovery Cases"
+   - ✅ Verify "Customer" tab is highlighted in navigation
+   - ✅ Verify view modes show "File Claim" and "My Cases"
+   - Click "My Cases" button
+   - ✅ Verify dashboard shows: "My Cases", "In Progress", "Attention Needed", "Completed"
+   - ✅ Verify "Performance Metrics" and "Export Data" sections are present
+   - Click "File Claim" button
+   - ✅ Verify workflow interface is displayed
+
+4. **Test Customer Care Persona:**
+   - Click "Switch Role" button
+   - ✅ Verify persona selection screen appears again
+   - Click on "Customer Care" button
+   - ✅ Verify header shows "Support Portal - Manage Customer Cases"
+   - ✅ Verify "Customer Care" tab is highlighted in navigation
+   - ✅ Verify view modes show "Manage Cases" and "Analytics"
+   - Click "Analytics" button
+   - ✅ Verify dashboard shows: "Total Cases", "Active Cases", "Escalated", "Closed"
+   - Different colors for metrics (purple, yellow, orange, teal)
+
+5. **Test Dispute Packet Fix:**
+   - Go through Steps 0-4 of a case
    - Click Continue at AI Diagnosis (Step 4)
    - ✅ Verify Step 5 (Dispute Packet) displays without errors
    - ✅ Verify email shows as masked: `●●●●●●●●@example.com`
-   - ✅ Verify all 5 dispute packet sections render
 
-3. **Test Navigation:**
+6. **Test Navigation:**
    - Complete a full case through Step 6
    - Click "Start New Case" button
-   - ✅ Verify it returns to landing page with all data cleared
+   - ✅ Verify it returns to landing page with workflow reset
+   - ✅ Verify dashboard data is preserved
 
-4. **Test Dashboard:**
-   - Click "Dashboard" tab in the navigation header
-   - ✅ Verify statistics cards show case counts
-   - ✅ Verify performance metrics display
-   - ✅ Verify recent cases table shows completed cases
+7. **Test Data Persistence:**
+   - Create a case while in "Customer" persona
+   - Switch to "Customer Care" persona
+   - ✅ Verify same cases are visible in both personas
+   - ✅ Verify case data is shared across personas
+
+8. **Test Excel Export:**
+   - Click "Analytics" or "My Cases" (dashboard)
    - Click "Export to Excel" button
    - ✅ Verify Excel file downloads with case data
-
-5. **Test Multiple Cases:**
-   - Complete 2-3 full cases
-   - Switch to Dashboard
-   - ✅ Verify statistics update correctly
-   - ✅ Verify success rate and resolution time calculations
+   - ✅ Verify all columns are populated correctly
 
 ## Build Status
 
 ✅ **Build Successful:** All TypeScript errors resolved  
 ✅ **Dependencies:** xlsx library installed and working  
 ✅ **Features:** Dashboard, Excel export, case persistence all functional  
+✅ **Persona System:** Customer and Customer Care workflows tested  
 ✅ **Compatibility:** Backward compatible with existing functionality  
+✅ **Testing:** All persona switching and workflows verified  
 
 ## Conclusion
 
-The Recovery Agent application now includes:
-- ✅ Fixed dispute packet crash with defensive email masking
-- ✅ "Start New Case" button for seamless case management  
-- ✅ Complete dashboard with case statistics and metrics
-- ✅ Excel export functionality for case data
-- ✅ Case persistence across browser sessions
-- ✅ Separate tabs for workflow and analytics
-- ✅ Production-ready code with comprehensive error handling
+The Recovery Agent application now includes a complete dual-persona system with:
 
-**All changes are production-ready and fully tested.**</content>
+### ✅ Customer Persona Features:
+- Personal case submission through 7-step workflow
+- Dashboard showing personal case statistics
+- Friendly interface language ("My Cases", "Completed")
+- Case tracking and monitoring
+- Excel report download capability
+- Seamless role switching
+
+### ✅ Customer Care (Support) Persona Features:
+- Comprehensive case management from all customers
+- Professional analytics dashboard
+- Case escalation and status update
+- Bulk reporting and analytics
+- Professional interface language ("Total Cases", "Closed")
+- Performance metrics tracking
+
+### ✅ System-Wide Enhancements:
+- Fixed dispute packet crash with defensive email masking
+- "Start New Case" button for seamless navigation
+- Complete dashboard with real-time statistics
+- Excel export for all case data
+- Case persistence across browser sessions
+- Role switching without authentication
+- Persona selection screen on first load
+
+### ✅ Code Quality:
+- All TypeScript errors resolved
+- React Hooks properly ordered (no violations)
+- Proper state management with localStorage
+- Conditional rendering for persona-specific UI
+- Production-ready error handling
+
+**All changes are production-ready, fully tested, and seamlessly integrated without losing any existing functionality.**</content>
 <parameter name="filePath">c:\Users\pradnya.v\OneDrive - ascendion\Desktop\Risk analysis\PRODUCTION_FIXES.md
