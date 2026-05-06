@@ -1,7 +1,11 @@
 import { IssueType } from '../data/appData';
 
 export function maskEmail(email: string) {
+  if (!email || !email.includes('@')) {
+    return '●●●●●●●●@example.com';
+  }
   const [local, domain] = email.split('@');
+  if (!domain) return '●●●●●●●●@example.com';
   const safeLocal = local.length > 2 ? `${local[0]}${'●'.repeat(Math.max(2, local.length - 2))}${local.slice(-1)}` : `${local[0]}●`;
   const [provider, tld] = domain.split('.');
   const safeProvider = provider.length > 3 ? `${provider.slice(0, 2)}${'●'.repeat(provider.length - 3)}${provider.slice(-1)}` : `${provider[0]}●`;

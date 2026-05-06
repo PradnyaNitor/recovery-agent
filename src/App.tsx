@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Circle, FilePlus, RefreshCcw, ShieldAlert, ShieldCheck, Sparkles, UploadCloud } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle, FilePlus, RefreshCcw, ShieldAlert, ShieldCheck, Sparkles, UploadCloud, BarChart3, FileSpreadsheet, Home } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import {
   disputePackets,
   evidenceRequirements,
@@ -27,9 +28,28 @@ interface UploadItem {
   status: 'uploading' | 'verifying' | 'verified';
 }
 
+interface Case {
+  id: string;
+  issueType: IssueType;
+  status: 'open' | 'escalated' | 'resolved';
+  stage: number;
+  createdAt: string;
+  resolvedAt?: string;
+  diagnosis?: any;
+  evidenceCount: number;
+  reportId?: string | null;
+}
+
+type ViewMode = 'flow' | 'dashboard';
+
 const stepIndices = issueSteps.map((title, index) => ({ title, index }));
 
 function App() {
+  const [viewMode, setViewMode] = useState<ViewMode>('flow');
+  const [cases, setCases] = useState<Case[]>(() => {
+    const saved = localStorage.getItem('recovery-cases');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedIssue, setSelectedIssue] = useState<IssueType | null>(null);
   const [chatResponse, setChatResponse] = useState('Select an issue type to begin your recovery case.');
@@ -44,6 +64,32 @@ function App() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportDownloaded, setReportDownloaded] = useState(false);
+
+  // Save cases to localStorage whenever cases change
+  useEffect(() => {
+    localStorage.setItem('recovery-cases', JSON.stringify(cases));
+  }, [cases]);
+
+  // Dashboard statistics
+  const dashboardStats = useMemo(() => {
+    const total = cases.length;
+    const open = cases.filter(c => c.status === 'open').length;
+    const escalated = cases.filter(c => c.status === 'escalated').length;
+    const resolved = cases.filter(c => c.status === 'resolved').length;
+    const avgResolutionTime = resolved > 0 
+      ? cases
+          .filter(c => c.resolvedAt)
+          .reduce((acc, c) => {
+            const created = new Date(c.createdAt).getTime();
+            const resolved = new Date(c.resolvedAt!).getTime();
+            return acc + (resolved - created);
+          }, 0) / resolved / (1000 * 60 * 60 * 24) // Convert to days
+      : 0;
+    
+    const successRate = total > 0 ? (resolved / total) * 100 : 0;
+    
+    return { total, open, escalated, resolved, avgResolutionTime: Math.round(avgResolutionTime * 10) / 10, successRate: Math.round(successRate) };
+  }, [cases]);
 
   const currentIssue = selectedIssue ? issueMetadata[selectedIssue] : null;
   const transactions = selectedIssue ? transactionData[selectedIssue] : [];
@@ -61,17 +107,17 @@ function App() {
   const progressPercent = Math.round(((currentStep + 1) / issueSteps.length) * 100);
 
   useEffect(() => {
-    if (currentStep === 4 && selectedIssue) {
+    if (currentStep === 4 && selectedIssue && !diagnosis) {
       setIsDiagnosing(true);
-      setDiagnosis(null);
+      // Generate diagnosis immediately instead of with timeout
       const timer = window.setTimeout(() => {
         setDiagnosis(generateDiagnosisHelper(selectedIssue, evidenceCount));
         setIsDiagnosing(false);
-      }, 1600);
+      }, 800); // Reduced timeout
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [currentStep, selectedIssue, evidenceCount]);
+  }, [currentStep, selectedIssue, evidenceCount, diagnosis]);
 
   const handleIssueSelect = (issue: IssueType) => {
     setSelectedIssue(issue);
@@ -119,6 +165,56 @@ function App() {
         setIsDiagnosing(false);
       }, 1200);
     }
+  };
+
+  const resetToLanding = () => {
+    // Save current case if it exists
+    if (selectedIssue) {
+      const caseData: Case = {
+        id: caseId,
+        issueType: selectedIssue,
+        status: trackerStage >= 6 ? 'resolved' : trackerStage >= 5 ? 'escalated' : 'open',
+        stage: trackerStage,
+        createdAt: new Date().toISOString(),
+        resolvedAt: trackerStage >= 6 ? new Date().toISOString() : undefined,
+        diagnosis,
+        evidenceCount,
+        reportId,
+      };
+      setCases(prev => [...prev, caseData]);
+    }
+    
+    // Reset all state
+    setCurrentStep(0);
+    setSelectedIssue(null);
+    setChatResponse('Select an issue type to begin your recovery case.');
+    setSelectedTransactionIndex(null);
+    setUploads([]);
+    setSkippedEvidence(false);
+    setDiagnosis(null);
+    setIsDiagnosing(false);
+    setTrackerStage(0);
+    setRefineText('');
+    setReportId(null);
+    setIsGeneratingReport(false);
+    setReportDownloaded(false);
+  };
+
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(cases.map(c => ({
+      'Case ID': c.id,
+      'Issue Type': c.issueType,
+      'Status': c.status,
+      'Current Stage': c.stage,
+      'Created At': new Date(c.createdAt).toLocaleDateString(),
+      'Resolved At': c.resolvedAt ? new Date(c.resolvedAt).toLocaleDateString() : 'N/A',
+      'Evidence Count': c.evidenceCount,
+      'Report Generated': c.reportId ? 'Yes' : 'No',
+    })));
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cases');
+    XLSX.writeFile(workbook, `recovery-cases-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleGenerateReport = async () => {
@@ -179,12 +275,25 @@ function App() {
     }
   };
 
+  const canAdvanceToStep = (targetStep: number) => {
+    for (let step = currentStep + 1; step <= targetStep; step++) {
+      if (step === 1 && !selectedIssue) return false;
+      if (step === 2 && selectedTransactionIndex === null) return false;
+      if (step === 3) continue; // Step 3 is always accessible
+      if (step === 4 && !diagnosis) return false;
+      if (step === 5 && !selectedIssue) return false;
+      if (step === 6) continue; // Step 6 is always accessible
+    }
+    return true;
+  };
+
   const canAdvance = () => {
     if (currentStep === 0) return true;
     if (currentStep === 1) return !!selectedIssue;
     if (currentStep === 2) return selectedTransactionIndex !== null;
     if (currentStep === 3) return true;
-    if (currentStep === 4) return !!diagnosis;
+    if (currentStep === 4) return !!diagnosis && !!selectedIssue;
+    if (currentStep === 5) return !!selectedIssue;
     return true;
   };
 
@@ -453,7 +562,7 @@ function App() {
               <div className="mb-6 rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
                 <div className="flex flex-col gap-1">
                   <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Registered email</p>
-                  <p className="text-lg text-white">{maskEmailHelper('[REDACTED_EMAIL_ADDRESS_5]')}</p>
+                  <p className="text-lg text-white">{maskEmailHelper('user@gmail.com')}</p>
                 </div>
                 <p className="mt-3 text-slate-400">Resolution updates and final case outcome will be sent to your registered email address.</p>
               </div>
@@ -464,16 +573,37 @@ function App() {
                 </div>
               ) : null}
               <div className="space-y-4">
-                {selectedIssue && disputePackets[selectedIssue].map((section) => (
-                  <div key={section.title} className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
-                    <h3 className="text-xl font-semibold text-white">{section.title}</h3>
-                    <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-300">
-                      {section.details.map((detail) => (
-                        <li key={detail}>{detail}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+                {(() => {
+                  const packetData = selectedIssue && disputePackets[selectedIssue as IssueType];
+                  if (!packetData || packetData.length === 0) {
+                    return (
+                      <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-6 text-amber-100">
+                        <p className="font-semibold">Unable to load dispute packet</p>
+                        <p className="mt-2 text-sm">Please ensure you've selected an issue type and completed the AI diagnosis.</p>
+                        <p className="mt-2 text-xs text-amber-200">
+                          Issue: {selectedIssue || 'None selected'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentStep(0)}
+                          className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+                        >
+                          Start Over
+                        </button>
+                      </div>
+                    );
+                  }
+                  return packetData.map((section) => (
+                    <div key={section.title} className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                      <h3 className="text-xl font-semibold text-white">{section.title}</h3>
+                      <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-300">
+                        {section.details.map((detail) => (
+                          <li key={detail}>{detail}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
           </motion.div>
@@ -534,6 +664,14 @@ function App() {
                   <ShieldCheck className="h-4 w-4" />
                   Mark Resolved
                 </button>
+                <button
+                  type="button"
+                  onClick={resetToLanding}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-400"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  Start New Case
+                </button>
               </div>
               <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Resolution summary</p>
@@ -550,6 +688,161 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
+        {/* Navigation Header */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-white">Recovery Agent</h1>
+            <p className="mt-2 text-slate-400">Case Management & Recovery Workflow</p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setViewMode('flow')}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                viewMode === 'flow' 
+                  ? 'bg-sky-500 text-white' 
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <Home className="h-4 w-4" />
+              Recovery Flow
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('dashboard')}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                viewMode === 'dashboard' 
+                  ? 'bg-sky-500 text-white' 
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Dashboard
+            </button>
+          </div>
+        </div>
+
+        {viewMode === 'dashboard' ? (
+          /* Dashboard View */
+          <div className="space-y-8">
+            {/* Statistics Cards */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-blue-500/10 p-3">
+                    <FilePlus className="h-6 w-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">{dashboardStats.total}</p>
+                    <p className="text-sm text-slate-400">Total Cases</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-amber-500/10 p-3">
+                    <RefreshCcw className="h-6 w-6 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">{dashboardStats.open}</p>
+                    <p className="text-sm text-slate-400">Open Cases</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-rose-500/10 p-3">
+                    <ShieldAlert className="h-6 w-6 text-rose-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">{dashboardStats.escalated}</p>
+                    <p className="text-sm text-slate-400">Escalated Cases</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-emerald-500/10 p-3">
+                    <ShieldCheck className="h-6 w-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">{dashboardStats.resolved}</p>
+                    <p className="text-sm text-slate-400">Resolved Cases</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Metrics */}
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Performance Metrics</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Success Rate</span>
+                    <span className="text-white font-semibold">{dashboardStats.successRate}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Avg Resolution Time</span>
+                    <span className="text-white font-semibold">{dashboardStats.avgResolutionTime} days</span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Export Data</h3>
+                <button
+                  type="button"
+                  onClick={exportToExcel}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-green-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-400"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Export to Excel
+                </button>
+                <p className="mt-2 text-xs text-slate-400">Download all case data as Excel spreadsheet</p>
+              </div>
+            </div>
+
+            {/* Recent Cases Table */}
+            <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Recent Cases</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800">
+                      <th className="text-left py-2 text-slate-400">Case ID</th>
+                      <th className="text-left py-2 text-slate-400">Issue Type</th>
+                      <th className="text-left py-2 text-slate-400">Status</th>
+                      <th className="text-left py-2 text-slate-400">Stage</th>
+                      <th className="text-left py-2 text-slate-400">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cases.slice(-10).reverse().map((caseItem) => (
+                      <tr key={caseItem.id} className="border-b border-slate-800/50">
+                        <td className="py-3 text-white">{caseItem.id}</td>
+                        <td className="py-3 text-slate-300">{caseItem.issueType}</td>
+                        <td className="py-3">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
+                            caseItem.status === 'resolved' ? 'bg-emerald-500/10 text-emerald-400' :
+                            caseItem.status === 'escalated' ? 'bg-rose-500/10 text-rose-400' :
+                            'bg-amber-500/10 text-amber-400'
+                          }`}>
+                            {caseItem.status}
+                          </span>
+                        </td>
+                        <td className="py-3 text-slate-300">{caseItem.stage}</td>
+                        <td className="py-3 text-slate-300">{new Date(caseItem.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {cases.length === 0 && (
+                  <p className="text-center py-8 text-slate-400">No cases recorded yet. Complete a recovery case to see data here.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
           <aside className="rounded-[2rem] border border-slate-800 bg-slate-950/95 p-6 shadow-card">
             <div className="mb-8 rounded-[2rem] border border-slate-800 bg-slate-900/95 p-6">
@@ -568,7 +861,7 @@ function App() {
                     key={step.title}
                     type="button"
                     onClick={() => {
-                      if (step.index <= currentStep) setCurrentStep(step.index);
+                      if (step.index <= currentStep && (step.index === currentStep || canAdvanceToStep(step.index))) setCurrentStep(step.index);
                     }}
                     className={`flex w-full items-center justify-between rounded-3xl border px-4 py-4 text-left transition ${
                       isActive ? 'border-sky-400 bg-slate-900 shadow-glow' : 'border-slate-800 bg-slate-950/95 hover:border-slate-600'
@@ -592,7 +885,7 @@ function App() {
             </div>
           </aside>
           <main className="space-y-6 min-h-[500px]">
-            <AnimatePresence mode="wait">{renderStepContent()}</AnimatePresence>
+            <AnimatePresence>{renderStepContent()}</AnimatePresence>
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-800 bg-slate-900/95 p-6 shadow-card sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-500">Current step</p>
@@ -625,6 +918,7 @@ function App() {
             </div>
           </main>
         </div>
+        )}
       </div>
     </div>
   );

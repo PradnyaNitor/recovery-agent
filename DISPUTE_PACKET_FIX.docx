@@ -1,0 +1,158 @@
+# Dispute Packet Fix - Code Changes
+
+## Issue: Dispute Packet Not Showing After AI Diagnosis
+
+**Problem:** After completing AI diagnosis (step 4), clicking "Continue" did not show the dispute packet (step 5).
+
+**Root Cause:** 
+1. Sidebar navigation allowed jumping to steps without validation
+2. AnimatePresence mode="wait" caused rendering issues
+3. Insufficient error handling for missing data
+
+## Solution: Applied 6 Key Fixes
+
+### File: src/App.tsx
+
+#### Change 1: Added canAdvanceToStep Function
+```typescript
+// Location: After canAdvance function (~line 180-195)
+// Purpose: Validates step navigation from sidebar clicks
+
+const canAdvanceToStep = (targetStep: number) => {
+  for (let step = currentStep + 1; step <= targetStep; step++) {
+    if (step === 1 && !selectedIssue) return false;
+    if (step === 2 && selectedTransactionIndex === null) return false;
+    if (step === 3) continue; // Step 3 is always accessible
+    if (step === 4 && !diagnosis) return false;
+    if (step === 5 && !selectedIssue) return false;
+    if (step === 6) continue; // Step 6 is always accessible
+  }
+  return true;
+};
+```
+
+#### Change 2: Updated canAdvance Function
+```typescript
+// Location: ~lines 195-205
+// Purpose: Stricter validation for Continue button
+
+const canAdvance = () => {
+  if (currentStep === 0) return true;
+  if (currentStep === 1) return !!selectedIssue;
+  if (currentStep === 2) return selectedTransactionIndex !== null;
+  if (currentStep === 3) return true;
+  if (currentStep === 4) return !!diagnosis && !!selectedIssue;
+  if (currentStep === 5) return !!selectedIssue;
+  return true;
+};
+```
+
+#### Change 3: Fixed Sidebar Navigation
+```typescript
+// Location: Sidebar button onClick (~lines 580-590)
+// Purpose: Prevent invalid step jumps
+
+onClick={() => {
+  if (step.index <= currentStep && (step.index === currentStep || canAdvanceToStep(step.index))) setCurrentStep(step.index);
+}}
+```
+
+#### Change 4: Improved Diagnosis Generation
+```typescript
+// Location: useEffect for diagnosis (~lines 65-75)
+// Purpose: More reliable diagnosis generation
+
+useEffect(() => {
+  if (currentStep === 4 && selectedIssue && !diagnosis) {
+    setIsDiagnosing(true);
+    const timer = window.setTimeout(() => {
+      setDiagnosis(generateDiagnosisHelper(selectedIssue, evidenceCount));
+      setIsDiagnosing(false);
+    }, 800); // Reduced from 1600ms
+    return () => window.clearTimeout(timer);
+  }
+  return undefined;
+}, [currentStep, selectedIssue, evidenceCount, diagnosis]);
+```
+
+#### Change 5: Fixed Animation Issues
+```typescript
+// Location: ~line 595
+// Purpose: Prevent AnimatePresence from blocking content
+
+// BEFORE:
+<AnimatePresence mode="wait">{renderStepContent()}</AnimatePresence>
+
+// AFTER:
+<AnimatePresence>{renderStepContent()}</AnimatePresence>
+```
+
+#### Change 6: Enhanced Dispute Packet Rendering
+```typescript
+// Location: Case 5 rendering (~lines 470-500)
+// Purpose: Defensive rendering with error handling
+
+<div className="space-y-4">
+  {(() => {
+    const packetData = selectedIssue && disputePackets[selectedIssue as IssueType];
+    if (!packetData || packetData.length === 0) {
+      return (
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-6 text-amber-100">
+          <p className="font-semibold">Unable to load dispute packet</p>
+          <p className="mt-2 text-sm">Please ensure you've selected an issue type and completed the AI diagnosis.</p>
+          <p className="mt-2 text-xs text-amber-200">
+            Issue: {selectedIssue || 'None selected'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(0)}
+            className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+          >
+            Start Over
+          </button>
+        </div>
+      );
+    }
+    return packetData.map((section) => (
+      <div key={section.title} className="rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
+        <h3 className="text-xl font-semibold text-white">{section.title}</h3>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-300">
+          {section.details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      </div>
+    ));
+  })()}
+</div>
+```
+
+## Testing Instructions
+
+1. Start the app: `npm run dev`
+2. Go through steps: Landing → Select Issue → Choose Transaction → Upload Evidence (optional) → AI Diagnosis
+3. Click "Continue" - should now show Dispute Packet with 4-5 sections
+4. Each issue type has different dispute packet content:
+   - **Scam**: Incident Summary, Timeline, Containment Actions, Monitoring Guidance, Awareness Note
+   - **Unauthorized**: Access Summary, Security Timeline, Immediate Actions, Evidence, Investigation Request
+   - **Duplicate**: Charge Summary, Processing Timeline, Pending vs Posted, Evidence, Reconciliation Request
+   - **Refund**: Refund Summary, Processing Timeline, SLA Steps, Documentation, Escalation Statement
+   - **Freeze**: Freeze Summary, Timeline, Restoration Steps, KYC Documents, Restoration Request
+
+## Deployment
+
+After applying changes:
+```bash
+git add .
+git commit -m "Fix dispute packet not showing after AI diagnosis"
+git push
+```
+
+The changes will auto-deploy to Vercel/Railway.
+
+## Expected Result
+
+- ✅ Dispute packet displays correctly after AI diagnosis
+- ✅ Proper validation prevents invalid step navigation
+- ✅ Error messages show if data is missing
+- ✅ All 5 issue types have tailored dispute packet content
