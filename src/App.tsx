@@ -64,6 +64,7 @@ function App() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportDownloaded, setReportDownloaded] = useState(false);
+  const [caseClosed, setCaseClosed] = useState(false);
 
   // Save cases to localStorage whenever cases change
   useEffect(() => {
@@ -168,6 +169,7 @@ function App() {
   };
 
   const resetToLanding = () => {
+  setCaseClosed(false);
     // Save current case if it exists
     if (selectedIssue) {
       const caseData: Case = {
@@ -649,29 +651,40 @@ function App() {
               </div>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
-                  type="button"
-                  onClick={() => setTrackerStage((prev) => Math.max(prev, 5))}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-rose-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-400"
-                >
-                  <ShieldAlert className="h-4 w-4" />
-                  Escalate Case
-                </button>
+  type="button"
+  onClick={() => {
+    setTrackerStage((prev) => Math.max(prev, 5));
+    setCaseClosed(true);
+  }}
+  className="inline-flex items-center gap-2 rounded-2xl bg-rose-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-400"
+>
+  <ShieldAlert className="h-4 w-4" />
+  Escalate Case
+</button>
                 <button
-                  type="button"
-                  onClick={() => setTrackerStage(6)}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-400"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  Mark Resolved
-                </button>
+  type="button"
+  onClick={() => {
+    setTrackerStage(6);
+    setCaseClosed(true);
+  }}
+  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-400"
+>
+  <ShieldCheck className="h-4 w-4" />
+  Mark Resolved
+</button>
                 <button
-                  type="button"
-                  onClick={resetToLanding}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-400"
-                >
-                  <ArrowRight className="h-4 w-4" />
-                  Start New Case
-                </button>
+  type="button"
+  onClick={resetToLanding}
+  disabled={!caseClosed}
+  className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition ${
+    caseClosed
+      ? 'bg-sky-500 text-white hover:bg-sky-400'
+      : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+  }`}
+>
+  <ArrowRight className="h-4 w-4" />
+  Start New Case
+</button>
               </div>
               <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-950/95 p-6">
                 <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Resolution summary</p>
@@ -901,19 +914,23 @@ function App() {
                     Back
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (currentStep < 6 && canAdvance()) setCurrentStep((prev) => Math.min(6, prev + 1));
-                  }}
-                  className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition ${
-                    canAdvance() ? 'bg-sky-500 text-slate-950 hover:bg-sky-400' : 'cursor-not-allowed bg-slate-800 text-slate-500'
-                  }`}
-                  disabled={!canAdvance()}
-                >
-                  Continue
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+               <button
+  type="button"
+  onClick={() => {
+    if (currentStep < 6 && canAdvance()) {
+      setCurrentStep((prev) => Math.min(6, prev + 1));
+    }
+  }}
+  className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition ${
+    canAdvance()
+      ? 'bg-sky-500 text-slate-950 hover:bg-sky-400'
+      : 'cursor-not-allowed bg-slate-800 text-slate-500'
+  }`}
+  disabled={!canAdvance() || currentStep === 6}
+>
+  Continue
+  <ArrowRight className="h-4 w-4" />
+</button>
               </div>
             </div>
           </main>
